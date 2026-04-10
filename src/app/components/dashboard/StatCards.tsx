@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, AlertTriangle, Activity, Gauge } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useCrowdMetrics } from '../../hooks/useCrowdMetrics';
 
 interface StatCardProps {
   title: string;
@@ -13,20 +14,21 @@ interface StatCardProps {
   tags?: string[];
   trend?: string;
   delay: number;
+  live?: boolean;
 }
 
-function StatCard({ title, value, suffix = '', icon, color, progress, progressMax, tags, trend, delay }: StatCardProps) {
+function StatCard({ title, value, suffix = '', icon, color, progress, progressMax, tags, trend, delay, live }: StatCardProps) {
   const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
-    const duration = 2000;
-    const steps = 60;
-    const increment = value / steps;
-    let current = 0;
+    const duration = 800;
+    const steps = 30;
+    const increment = (value - displayValue) / steps;
+    let current = displayValue;
 
     const timer = setInterval(() => {
       current += increment;
-      if (current >= value) {
+      if ((increment > 0 && current >= value) || (increment < 0 && current <= value)) {
         setDisplayValue(value);
         clearInterval(timer);
       } else {
@@ -47,7 +49,15 @@ function StatCard({ title, value, suffix = '', icon, color, progress, progressMa
       <div className="relative z-10">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <p className="text-gray-400 text-sm mb-2">{title}</p>
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-gray-400 text-sm">{title}</p>
+              {live && (
+                <span className="flex items-center gap-1 text-xs text-green-400">
+                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                  LIVE
+                </span>
+              )}
+            </div>
             <div className="flex items-baseline gap-2">
               <span className="text-4xl font-bold text-white">
                 {displayValue.toLocaleString()}
@@ -60,7 +70,7 @@ function StatCard({ title, value, suffix = '', icon, color, progress, progressMa
           </div>
         </div>
 
-        {tags && (
+        {tags && tags.length > 0 && (
           <div className="flex gap-2 mb-3">
             {tags.map((tag, idx) => (
               <span
@@ -98,10 +108,8 @@ function StatCard({ title, value, suffix = '', icon, color, progress, progressMa
 
         {trend && (
           <div className="flex items-center gap-2 mt-3">
-            <span className="text-xs text-gray-400">Detected/min</span>
-            <span className="text-xs text-green-400 flex items-center gap-1">
-              ↑ {trend}
-            </span>
+            <span className="text-xs text-gray-400">Current frame</span>
+            <span className="text-xs text-green-400">{trend} people</span>
           </div>
         )}
       </div>
@@ -112,90 +120,71 @@ function StatCard({ title, value, suffix = '', icon, color, progress, progressMa
 }
 
 export function StatCards() {
-  const [attendance, setAttendance] = useState(62400);
-  const [incidents, setIncidents] = useState(4);
-  const [detections, setDetections] = useState(1240);
-  const [avgDensity, setAvgDensity] = useState(2.4);
+  const { latest, connected } = useCrowdMetrics();
 
-  // Update all stats every 5-10 seconds
-  useEffect(() => {
-    const updateStats = () => {
-      // Total Attendance: gradually increases (people entering)
-      setAttendance(prev => {
-        const change = Math.floor(Math.random() * 300) - 100; // -100 to +200
-        return Math.max(60000, Math.min(80000, prev + change));
-      });
+  const peoplePred  = latest?.peoplePred      ?? 0;
+  const incidents   = latest?.activeIncidents ?? 0;
+  const density     = latest?.avgDensity      ?? 0;
+  const riskLevel   = latest?.riskLevel       ?? 'Normal';
 
-      // Active Incidents: fluctuates between 2-8
-      setIncidents(prev => {
-        const change = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
-        return Math.max(2, Math.min(8, prev + change));
-      });
-
-      // AI Detections: keeps increasing
-      setDetections(prev => {
-        const change = Math.floor(Math.random() * 50) + 10; // +10 to +60
-        return prev + change;
-      });
-
-      // Avg Density: fluctuates based on attendance
-      setAvgDensity(prev => {
-        const change = (Math.random() - 0.5) * 0.4; // -0.2 to +0.2
-        return Math.max(1.8, Math.min(3.2, parseFloat((prev + change).toFixed(1))));
-      });
-    };
-
-    // Initial update after 3 seconds
-    const initialTimeout = setTimeout(updateStats, 3000);
-
-    // Then update every 5-10 seconds
-    const interval = setInterval(() => {
-      updateStats();
-    }, Math.random() * 5000 + 5000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, []);
+  const incidentTags = incidents >= 3
+    ? ['1 Critical', '1 High']
+    : incidents >= 1
+    ? ['1 High']
+    : [];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <StatCard
-        title="Total Attendance"
-        value={attendance}
+        title="People Detected"
+        value={peoplePred}
         icon={<Users className="text-green-400" size={24} />}
         color="bg-green-500/10"
-        progress={attendance}
-        progressMax={80000}
         delay={0}
+        live={connected}
       />
-      
+
       <StatCard
         title="Active Incidents"
         value={incidents}
-        icon={<AlertTriangle className="text-red-400" size={24} />}
-        color="bg-red-500/10"
-        tags={['1 Critical', '1 High']}
+        icon={<AlertTriangle className={incidents >= 3 ? 'text-red-400' : 'text-orange-400'} size={24} />}
+        color={incidents >= 3 ? 'bg-red-500/10' : 'bg-orange-500/10'}
+        tags={incidentTags}
         delay={0.1}
+        live={connected}
       />
-      
+
       <StatCard
-        title="AI Detections"
-        value={detections}
+        title="AI Detections (Session)"
+        value={peoplePred}
         icon={<Activity className="text-blue-400" size={24} />}
         color="bg-blue-500/10"
-        trend="+6%"
+        trend={connected ? String(peoplePred) : undefined}
         delay={0.2}
+        live={connected}
       />
-      
+
       <StatCard
         title="Avg Density"
-        value={avgDensity}
+        value={density}
         suffix="people/m²"
-        icon={<Gauge className="text-purple-400" size={24} />}
-        color="bg-purple-500/10"
+        icon={
+          <Gauge
+            className={
+              riskLevel === 'Critical' ? 'text-red-400'
+              : riskLevel === 'Busy'   ? 'text-orange-400'
+              : 'text-purple-400'
+            }
+            size={24}
+          />
+        }
+        color={
+          riskLevel === 'Critical' ? 'bg-red-500/10'
+          : riskLevel === 'Busy'   ? 'bg-orange-500/10'
+          : 'bg-purple-500/10'
+        }
         delay={0.3}
+        live={connected}
       />
     </div>
   );

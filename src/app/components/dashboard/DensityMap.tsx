@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Map, Play, Pause, AlertTriangle, Maximize2, ZoomIn, ZoomOut, Layers } from 'lucide-react';
+import { Map, Play, Pause, AlertTriangle, ZoomIn, ZoomOut, Layers } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useCrowdMetrics } from '../../hooks/useCrowdMetrics';
 
 interface Zone {
   id: string;
@@ -165,6 +166,27 @@ export function DensityMap() {
   const [currentTime, setCurrentTime] = useState(0);
   const [timeRange, setTimeRange] = useState('15m');
 
+  const { latest, prediction } = useCrowdMetrics();
+  const aiSubtitle = latest
+    ? `${latest.peoplePred} detected • ${latest.riskLevel} • 15m forecast: ${prediction?.predictedRisk ?? '...'}`
+    : '52 gates • Live AI + IOT Monitoring';
+
+  // Drive the center gate (TC1-1) from live AI data
+  useEffect(() => {
+    if (!latest) return;
+    const liveStatus: Zone['status'] =
+      latest.riskLevel === 'Critical' ? 'critical' :
+      latest.riskLevel === 'Busy'     ? 'busy'     : 'normal';
+    const livePct = Math.min(100, Math.round((latest.peoplePred / 80) * 100));
+    setZones(prev => prev.map(z =>
+      z.id === 'TC1-1'
+        ? { ...z, status: liveStatus, percentage: livePct,
+            people: (latest.avgDensity).toFixed(1),
+            hasAlert: latest.riskLevel === 'Critical' }
+        : z
+    ));
+  }, [latest?.riskLevel, latest?.peoplePred]);
+
   // Calculate metrics dynamically from zones
   const criticalCount = zones.filter(z => z.status === 'critical').length;
   const warningCount = zones.filter(z => z.status === 'busy').length;
@@ -240,7 +262,7 @@ export function DensityMap() {
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">Gate & Concourse Density</h2>
-            <p className="text-[11px] text-gray-400">52 gates • Live AI + IOT Monitoring</p>
+            <p className="text-[11px] text-gray-400">{aiSubtitle}</p>
           </div>
         </div>
         

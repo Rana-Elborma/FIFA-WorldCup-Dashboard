@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, MapPin, Clock, ChevronRight, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useCrowdMetrics } from '../../hooks/useCrowdMetrics';
 
 interface Incident {
   id: number;
@@ -11,49 +12,34 @@ interface Incident {
   timestamp: string;
   confidence: number;
   acknowledged: boolean;
+  fromAI?: boolean;
 }
 
 const initialIncidents: Incident[] = [
   {
-    id: 1,
-    severity: 'critical',
+    id: 1, severity: 'critical',
     title: 'Severe Overcrowding Detected',
-    location: 'Gate A3 - Main Entrance',
-    category: 'Density Violation',
-    timestamp: '14:32:05',
-    confidence: 98,
-    acknowledged: false
+    location: 'Gate A3 - Main Entrance', category: 'Density Violation',
+    timestamp: '14:32:05', confidence: 98, acknowledged: false,
   },
   {
-    id: 2,
-    severity: 'high',
+    id: 2, severity: 'high',
     title: 'Unauthorized Zone Access',
-    location: 'Staff Stand - Corridor',
-    category: 'Door Breach',
-    timestamp: '14:28:12',
-    confidence: 94,
-    acknowledged: false
+    location: 'Staff Stand - Corridor', category: 'Door Breach',
+    timestamp: '14:28:12', confidence: 94, acknowledged: false,
   },
   {
-    id: 3,
-    severity: 'medium',
+    id: 3, severity: 'medium',
     title: 'Queue Flow Stoppage',
-    location: 'Concourse Level 2',
-    category: 'Flow Analysis',
-    timestamp: '14:15:43',
-    confidence: 87,
-    acknowledged: false
+    location: 'Concourse Level 2', category: 'Flow Analysis',
+    timestamp: '14:15:43', confidence: 87, acknowledged: false,
   },
   {
-    id: 4,
-    severity: 'low',
+    id: 4, severity: 'low',
     title: 'Camera Obstruction',
-    location: 'Gate D / North Stand',
-    category: 'Crowd Heads',
-    timestamp: '14:02:31',
-    confidence: 72,
-    acknowledged: false
-  }
+    location: 'Gate D / North Stand', category: 'Crowd Heads',
+    timestamp: '14:02:31', confidence: 72, acknowledged: false,
+  },
 ];
 
 interface ActiveIncidentsProps {
@@ -63,34 +49,71 @@ interface ActiveIncidentsProps {
 
 export function ActiveIncidents({ showToast, decrementIncidents }: ActiveIncidentsProps) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'unassigned'>('all');
-  const [incidents, setIncidents] = useState(initialIncidents);
+  const [incidents, setIncidents] = useState<Incident[]>(initialIncidents);
+  const { latest } = useCrowdMetrics();
+  const lastRiskRef = useRef<string>('Normal');
+  const nextIdRef   = useRef(100);
+
+  // Inject a new AI incident when backend reports Critical
+  useEffect(() => {
+    if (!latest) return;
+    const risk = latest.riskLevel;
+    if (risk === 'Critical' && lastRiskRef.current !== 'Critical') {
+      const newIncident: Incident = {
+        id:           nextIdRef.current++,
+        severity:     'critical',
+        title:        'AI: Critical Crowd Density Detected',
+        location:     latest.source ?? 'Live Camera Feed',
+        category:     'Density Violation',
+        timestamp:    latest.timestamp,
+        confidence:   Math.round(90 + Math.random() * 9),
+        acknowledged: false,
+        fromAI:       true,
+      };
+      setIncidents(prev => [newIncident, ...prev]);
+      showToast('⚠️ AI detected critical crowd density!');
+    } else if (risk === 'Busy' && lastRiskRef.current === 'Normal') {
+      const newIncident: Incident = {
+        id:           nextIdRef.current++,
+        severity:     'high',
+        title:        'AI: High Crowd Density Warning',
+        location:     latest.source ?? 'Live Camera Feed',
+        category:     'Flow Analysis',
+        timestamp:    latest.timestamp,
+        confidence:   Math.round(80 + Math.random() * 10),
+        acknowledged: false,
+        fromAI:       true,
+      };
+      setIncidents(prev => [newIncident, ...prev]);
+    }
+    lastRiskRef.current = risk;
+  }, [latest?.riskLevel]);
 
   const filteredIncidents = incidents.filter(incident => {
-    if (!incident.acknowledged) {
-      if (filter === 'all') return true;
-      if (filter === 'critical') return incident.severity === 'critical';
-      if (filter === 'high') return incident.severity === 'high';
-      if (filter === 'unassigned') return true;
-    }
-    return false;
+    if (incident.acknowledged) return false;
+    if (filter === 'all')      return true;
+    if (filter === 'critical') return incident.severity === 'critical';
+    if (filter === 'high')     return incident.severity === 'high';
+    return true;
   });
 
   const handleAcknowledge = (id: number) => {
-    setIncidents(prev => 
-      prev.map(incident => 
-        incident.id === id ? { ...incident, acknowledged: true } : incident
-      )
+    setIncidents(prev =>
+      prev.map(i => i.id === id ? { ...i, acknowledged: true } : i)
     );
     decrementIncidents();
     showToast('Incident acknowledged successfully');
   };
 
   const severityColors = {
-    critical: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500', badge: 'bg-red-500/20 border-red-500/30' },
-    high: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500', badge: 'bg-orange-500/20 border-orange-500/30' },
-    medium: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500', badge: 'bg-blue-500/20 border-blue-500/30' },
-    low: { bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500', badge: 'bg-gray-500/20 border-gray-500/30' }
+    critical: { bg: 'bg-red-500/10',    text: 'text-red-400',    border: 'border-red-500',    badge: 'bg-red-500/20 border-red-500/30' },
+    high:     { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500', badge: 'bg-orange-500/20 border-orange-500/30' },
+    medium:   { bg: 'bg-blue-500/10',   text: 'text-blue-400',   border: 'border-blue-500',   badge: 'bg-blue-500/20 border-blue-500/30' },
+    low:      { bg: 'bg-gray-500/10',   text: 'text-gray-400',   border: 'border-gray-500',   badge: 'bg-gray-500/20 border-gray-500/30' },
   };
+
+  const criticalCount = filteredIncidents.filter(i => i.severity === 'critical').length;
+  const highCount     = filteredIncidents.filter(i => i.severity === 'high').length;
 
   return (
     <div className="bg-[#1e2a4a] rounded-xl border border-gray-800 overflow-hidden">
@@ -111,43 +134,26 @@ export function ActiveIncidents({ showToast, decrementIncidents }: ActiveInciden
                 <path d="M2 4h12M2 8h12M2 12h12" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </button>
-            <button className="p-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors">
-              ⋮
-            </button>
+            <button className="p-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors">⋮</button>
           </div>
         </div>
 
         <div className="flex gap-2 mt-4">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${
-              filter === 'all'
-                ? 'bg-[#0f172a] text-white'
-                : 'bg-transparent text-gray-400 hover:text-white'
-            }`}
-          >
-            All (4)
-          </button>
-          <button
-            onClick={() => setFilter('critical')}
-            className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${
-              filter === 'critical'
-                ? 'bg-[#0f172a] text-white'
-                : 'bg-transparent text-gray-400 hover:text-white'
-            }`}
-          >
-            Critical (1)
-          </button>
-          <button
-            onClick={() => setFilter('high')}
-            className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${
-              filter === 'high'
-                ? 'bg-[#0f172a] text-white'
-                : 'bg-transparent text-gray-400 hover:text-white'
-            }`}
-          >
-            High (1)
-          </button>
+          {[
+            { key: 'all',      label: `All (${filteredIncidents.length})` },
+            { key: 'critical', label: `Critical (${criticalCount})` },
+            { key: 'high',     label: `High (${highCount})` },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key as typeof filter)}
+              className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${
+                filter === key ? 'bg-[#0f172a] text-white' : 'bg-transparent text-gray-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -159,11 +165,11 @@ export function ActiveIncidents({ showToast, decrementIncidents }: ActiveInciden
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -100 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
               className={`bg-white rounded-lg border-l-4 ${severityColors[incident.severity].border} p-4 shadow-sm`}
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <AlertTriangle className={severityColors[incident.severity].text} size={16} />
                   <span className={`px-2 py-1 rounded text-xs font-bold border ${severityColors[incident.severity].badge} ${severityColors[incident.severity].text}`}>
                     {incident.severity}
@@ -171,6 +177,11 @@ export function ActiveIncidents({ showToast, decrementIncidents }: ActiveInciden
                   <span className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs text-gray-600">
                     {incident.confidence}% AI Confidence
                   </span>
+                  {incident.fromAI && (
+                    <span className="px-2 py-1 bg-blue-100 border border-blue-300 rounded text-xs text-blue-600 font-bold">
+                      LIVE AI
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 text-gray-500 text-xs">
                   <Clock size={12} />

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { StatCards } from './dashboard/StatCards';
 import { LiveSurveillance } from './dashboard/LiveSurveillance';
 import { DensityMap } from './dashboard/DensityMap';
+import { CrowdChart } from './dashboard/CrowdChart';
+import { HeatmapView } from './dashboard/HeatmapView';
 
 export function Dashboard() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -19,6 +21,10 @@ export function Dashboard() {
 
       <StatCards />
       <LiveSurveillance />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CrowdChart />
+        <HeatmapView />
+      </div>
       <DensityMap />
     </div>
   );
