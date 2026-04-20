@@ -47,10 +47,15 @@ async function safeFetch<T>(url: string): Promise<T | null> {
   }
 }
 
+export interface StreamFrame {
+  frame: string; // base64 JPEG — annotated webcam frame with bounding boxes
+}
+
 export const crowdApi = {
-  getLatest:     () => safeFetch<LatestMetrics>(`${BASE_URL}/api/v1/metrics/latest`),
-  getHistory:    () => safeFetch<HistoryEntry[]>(`${BASE_URL}/api/v1/metrics/history`),
-  getPrediction: () => safeFetch<Prediction15>(`${BASE_URL}/api/v1/predictions/15min`),
-  getHealth:     () => safeFetch<HealthStatus>(`${BASE_URL}/api/v1/health`),
-  getHeatmap:    () => safeFetch<HeatmapData>(`${BASE_URL}/api/v1/heatmap`),
+  getLatest:      () => safeFetch<LatestMetrics>(`${BASE_URL}/api/v1/metrics/latest`),
+  getHistory:     () => safeFetch<HistoryEntry[]>(`${BASE_URL}/api/v1/metrics/history`),
+  getPrediction:  () => safeFetch<Prediction15>(`${BASE_URL}/api/v1/predictions/15min`),
+  getHealth:      () => safeFetch<HealthStatus>(`${BASE_URL}/api/v1/health`),
+  getHeatmap:     () => safeFetch<HeatmapData>(`${BASE_URL}/api/v1/heatmap`),
+  getStreamFrame: () => safeFetch<StreamFrame>(`${BASE_URL}/api/v1/stream/frame`),
 };

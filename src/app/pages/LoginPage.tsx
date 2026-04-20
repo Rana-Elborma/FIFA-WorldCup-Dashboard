@@ -48,8 +48,8 @@ export function LoginPage() {
     if (!email || !password) { setError('Please enter your email and password.'); return; }
     setLoading(true);
     try {
-      const { name, role } = await apiSignIn(email, password);
-      signIn(email, name, role);
+      const { name, role, access_token, user } = await apiSignIn(email, password) as any;
+      signIn(email, name, role, access_token, user?.id);
       navigate('/dashboard');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');

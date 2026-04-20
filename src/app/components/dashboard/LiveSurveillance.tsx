@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Video, Users, Activity, Maximize2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCrowdMetrics } from '../../hooks/useCrowdMetrics';
+import { crowdApi } from '../../services/crowdApi';
 
 interface CameraFeed {
   id: number;
@@ -23,7 +24,7 @@ const staticFeeds: CameraFeed[] = [
   { id: 9, name: 'Exit Tunnel 4', location: 'North Exit',    status: 'Normal',   crowdCount: 142, peopleIcons: 2 },
 ];
 
-function CameraCard({ feed }: { feed: CameraFeed }) {
+function CameraCard({ feed, liveSrc = '' }: { feed: CameraFeed; liveSrc?: string }) {
   const statusColors = {
     Normal:   'bg-green-500',
     Warning:  'bg-orange-500',
@@ -57,9 +58,15 @@ function CameraCard({ feed }: { feed: CameraFeed }) {
         </div>
       </div>
 
-      <div className="bg-gray-900 rounded-lg h-32 mb-3 flex items-center justify-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 opacity-50"></div>
-        <Video className="text-gray-600 relative z-10" size={32} />
+      <div className={`bg-gray-900 rounded-lg mb-3 flex items-center justify-center relative overflow-hidden ${liveSrc ? 'h-[480px]' : 'h-48'}`}>
+        {liveSrc ? (
+          <img src={liveSrc} alt="Live feed" className="w-full h-full object-cover" />
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 opacity-50"></div>
+            <Video className="text-gray-600 relative z-10" size={32} />
+          </>
+        )}
         <div className="absolute bottom-2 right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded flex items-center gap-1">
           <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
           REC
@@ -93,6 +100,18 @@ function CameraCard({ feed }: { feed: CameraFeed }) {
 export function LiveSurveillance() {
   const { latest, connected } = useCrowdMetrics();
   const [feeds, setFeeds] = useState<CameraFeed[]>(staticFeeds);
+  const [streamSrc, setStreamSrc] = useState<string>('');
+
+  // Poll annotated frame every 1 s
+  useEffect(() => {
+    const fetchFrame = async () => {
+      const data = await crowdApi.getStreamFrame();
+      if (data?.frame) setStreamSrc(`data:image/jpeg;base64,${data.frame}`);
+    };
+    fetchFrame();
+    const id = setInterval(fetchFrame, 500);
+    return () => clearInterval(id);
+  }, []);
 
   // Slot 0 (id=1) is the AI-powered live camera card
   const liveCard: CameraFeed = {
@@ -159,7 +178,9 @@ export function LiveSurveillance() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {allFeeds.map(feed => (
-          <CameraCard key={feed.id} feed={feed} />
+          <div key={feed.id} className={feed.id === 1 ? 'md:col-span-2 lg:col-span-3' : ''}>
+            <CameraCard feed={feed} liveSrc={feed.id === 1 ? streamSrc : ''} />
+          </div>
         ))}
       </div>
     </div>
